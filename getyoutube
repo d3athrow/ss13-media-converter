@@ -1,0 +1,32 @@
+#!/usr/bin/python
+import glob, os, hashlib, logging, subprocess, sys
+def DownloadYoutube(uri,todir):
+	return cmd(['youtube-dl', '-o', 'source/{DIR}/%(title)s-%(id)s.%(ext)s'.format(DIR=todir), '-x', '--audio-format=vorbis', uri],showoutput=True)
+	
+def cmd(command, showoutput=False):
+	logging.debug(u'>>> '+repr(command))
+	output=''
+	if showoutput:
+		return subprocess.call(command,stderr=subprocess.STDOUT) == 0
+	try:
+		output = subprocess.check_output(command,stderr=subprocess.STDOUT)
+		return True
+	except Exception as e:
+		logging.error(u"$ "+u' '.join(command))
+		logging.error(output)
+		logging.error(e)
+		return False
+	
+if len(sys.argv) == 1:
+	print("getyoutube <todir> http://youtube.com/?v=... [...]\n\tDownloads to source/<todir>/.\n")
+	sys.exit(1)
+todir = sys.argv[1]
+logging.basicConfig(format='%(asctime)s [%(levelname)-8s]: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
+for uri in sys.argv[2:]:
+	if(uri.startswith('@')):
+		with open(uri[1:],'r') as f:
+			for line in f:
+				if not DownloadYoutube(line.strip(),todir): 
+					sys.exit(1)
+	elif not DownloadYoutube(uri,todir): sys.exit(1)
+	

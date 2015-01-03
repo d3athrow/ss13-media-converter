@@ -1,0 +1,8 @@
+playlists:
+        # We want to include the jazz playlist in the bar mix.
+        bar:
+                include:
+                        playlists:
+                                - jazz
+                        tracks: []
+                
