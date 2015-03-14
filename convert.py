@@ -58,7 +58,7 @@ cmds += [(
 # Was originally going to use OGG.
 #cmds += [('oggenc tmp/VOX-sox-word.wav -o '+oggfile,oggfile)]
 
-playlists = ['rock','jazz','bar','endgame','shuttle','muzak', 'emagged', 'clockwork', 'thunderdome'] # Keygen is too fucking big.
+playlists = ['rock','jazz','bar','endgame','shuttle','muzak', 'emagged', 'clockwork', 'thunderdome', 'delta', 'beach'] # Keygen is too fucking big.
 
 sourcefiles=[]
 deadfiles = []
@@ -105,7 +105,7 @@ def check(wdir, exts, op, **kwargs):
 		for file in files:
 			fromfile=os.path.join(root,file)
 			title, ext = os.path.splitext(os.path.basename(fromfile))
-			if ext.strip(u'.') not in exts:
+			if len(exts) > 0 and ext.strip(u'.') not in exts:
 				#logging.warn(u'Skipping {} ({})'.format(fromfile, ext))
 				continue
 			op(fromfile, **kwargs)
@@ -257,6 +257,23 @@ class TimeExecution(object):
     def __exit__(self, type, value, traceback):
         logging.info('  Completed in {1}s - {0}'.format(self.label, secondsToStr(TIME_SOURCE() - self.start_time)))
         return False
+
+def check_converted(infile,basedir='tmp_files'):
+	global sourcefiles
+	sinfile = removeNonAscii(infile)
+	if sinfile != infile:
+		logging.critical("File {} (stripped) has nonascii filename.".format(sinfile))
+		sys.exit()
+	global sourcefiles, deadfiles
+	if isinstance(infile, unicode):
+		infile = infile.decode('utf-8')
+	title, ext = os.path.splitext(os.path.basename(infile))
+	playlist = os.path.relpath(os.path.dirname(infile),u'./'+basedir)
+	sourcefile = os.path.join(playlist,cleanFilename(title))
+	if sourcefile not in sourcefiles:
+		if os.path.isfile(infile):
+			logging.critical("File {} has no matching source, removing.".format(infile))
+			os.remove(infile)
     
 def convert_to_mp3(infile,newroot,args):
 	global sourcefiles, OUTPUT_EXT
@@ -278,7 +295,7 @@ def convert_to_mp3(infile,newroot,args):
 		if newroot not in skip_tagging:
 			update_tags(origfile,outfile)
 		return
-	logging.info(u"Converting {}...".format(outfile))
+	logging.info(u"Converting {}...".format(origfile))
 	
 	start=0
 	if ext in (u'.m4a',u'.webm'):
@@ -330,10 +347,9 @@ def del_dirs(src_dir):
 
 logging.basicConfig(format='%(asctime)s [%(levelname)-8s]: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
 
-
 with open('config.yml','r') as f:
 	config = yaml.load(f)
-	print(repr(config))
+	#print(repr(config))
 
 move(source_dir,
      u'tmp_files',
@@ -344,9 +360,11 @@ move(source_dir,
      )
 
 logging.info('Checking converted files...')
+check(u'tmp_files', (OUTPUT_EXT,), check_converted)
+
 for playlist in playlists:
 	move(os.path.join('tmp_files',playlist), os.path.join(OUTPUT_DIR), [OUTPUT_EXT], OUTPUT_EXT, filename_md5, playlist=playlist)
-check(os.path.join(OUTPUT_DIR), ('m4a','wav','mp3','ogg','webm','oga'), check_md5s)
+check(OUTPUT_DIR, ('m4a','wav','mp3','ogg','webm','oga'), check_md5s)
 	
 for deadfile in deadfiles:
 	if os.path.isfile(deadfile):
@@ -357,13 +375,17 @@ for deadfile in deadfiles:
 del_dirs(OUTPUT_DIR)
 
 for plID,plConfig in config['playlists'].items():
+	numIncluded=0
 	if 'include' in plConfig:
 		if 'files' in plConfig['include']:
-			for nf in plConfig['include']['tracks']:
-				md5 = revmd5s[nf]
+			for nf in plConfig['include']['files']:
+				md5 = revmd5s[os.path.join('tmp_files',nf)]
 				if plID not in fileRegistry[md5]['playlists']:
-					logging.info('Media file %s included to playlist %s.',md5,plID)
+					#logging.info('Media file %s included to playlist %s.',nf,plID)
 					fileRegistry[md5]['playlists'] += [plID]
+					numIncluded += 1
+				else:
+					logging.warn('Playlist %s trying to include %s, when it already has it.',plID,nf)
 		if 'playlists' in plConfig['include']:
 			playlistsWanted = plConfig['include']['playlists']
 			if len(playlistsWanted)>0:
@@ -373,8 +395,11 @@ for plID,plConfig in config['playlists'].items():
 						if plWanted in fileRegistry[md5]['playlists']:
 							wanted = True
 					if wanted and plID not in fileRegistry[md5]['playlists']:
-						logging.info('Media file %s included to playlist %s.',md5,plID)
+						#logging.info('Media file %s included to playlist %s.',md5,plID)
 						fileRegistry[md5]['playlists'] += [plID]
+						numIncluded+=1
+	if numIncluded > 0:
+		logging.info('%d media files included to playlist %s.',numIncluded,plID)
 
 #with open(OUTPUT_DIR+'/sauce.txt','w') as f:
 #	for md5,filename in sorted(md5s.items()):
